@@ -162,4 +162,179 @@ Visualization includes:
    - API endpoints for model inference
    - Automated retraining pipelines
 
+# Stock Price Prediction with Multiple Models
+
+This Jupyter notebook implements a comprehensive stock price prediction system using three different machine learning models: XGBoost, Prophet, and ARIMA. Let's break down each section in detail:
+
+## 1. Import Libraries and Setup
+
+```python
+import datetime
+import matplotlib.pyplot as plt
+import numpy as np
+import optuna
+import pandas as pd
+import yfinance as yf
+
+from prophet import Prophet
+from sklearn.metrics import mean_absolute_error, mean_squared_error
+from sklearn.model_selection import train_test_split
+from statsmodels.tsa.arima.model import ARIMA
+from statsmodels.tsa.stattools import adfuller
+from xgboost import XGBRegressor
+
+import warnings
+warnings.filterwarnings("ignore")
+
+plt.style.use('ggplot')
+```
+
+This section imports all necessary libraries:
+- **yfinance**: For downloading stock data from Yahoo Finance
+- **prophet**: Facebook's time series forecasting library
+- **sklearn**: For machine learning utilities and metrics
+- **statsmodels**: For statistical models including ARIMA
+- **xgboost**: For gradient boosting regression
+- **optuna**: For hyperparameter optimization
+
+Warnings are suppressed to keep the output clean, and ggplot style is used for plots.
+
+## 2. Data Download and Preparation
+
+```python
+stock_data = yf.download('AAPL', period='3y')  # Get 3 years of Apple stock data
+num_days_pred = 30  # Number of days to predict in the future
+```
+
+The code downloads 3 years of Apple (AAPL) stock data and sets the prediction horizon to 30 days.
+
+```python
+# Fix MultiIndex columns and keep only Close price
+stock_data.columns = ['_'.join(col).strip() for col in stock_data.columns.values]
+stock_data = stock_data[['Close_AAPL']].copy()
+stock_data.rename(columns={'Close_AAPL': 'Close'}, inplace=True)
+```
+
+Yahoo Finance returns MultiIndex columns, so we flatten them and keep only the closing price, which is typically the most important for prediction.
+
+## 3. Utility Functions
+
+### MAPE Calculation
+```python
+def mean_absolute_percentage_error(y_true, y_pred):
+    """Calculates MAPE given y_true and y_pred"""
+    y_true, y_pred = np.array(y_true), np.array(y_pred)
+    return np.mean(np.abs((y_true - y_pred) / np.maximum(np.ones_like(y_true), np.abs(y_true)))) * 100
+```
+
+Mean Absolute Percentage Error (MAPE) is a useful metric for regression problems as it expresses accuracy as a percentage.
+
+### Feature Engineering Functions
+```python
+def add_lags(df, num_lags=12):
+    """Add lag features with a reasonable number of lags"""
+    # ... creates lag features for time series
+
+def create_features(df):
+    """Create time series features based on time series index"""
+    # ... creates datetime features like dayofweek, month, etc.
+```
+
+These functions create additional features for the models:
+- **Lag features**: Previous values of the time series
+- **Datetime features**: Day of week, month, year, etc. to capture seasonality
+
+### Stationarity Check
+```python
+def check_stationarity(timeseries):
+    """Check if a time series is stationary using Augmented Dickey-Fuller test"""
+    # ... performs ADF test
+```
+
+Stationarity is an important assumption for many time series models. The Augmented Dickey-Fuller test checks if a time series is stationary.
+
+## 4. XGBoost Model Implementation
+
+### Data Preparation
+```python
+def prepare_xgboost_data(df_xgb, add_lags_func, create_features_func):
+    # Applies feature engineering and returns features (X) and target (y)
+```
+
+Prepares the data for XGBoost by creating features and splitting into X (features) and y (target).
+
+### Hyperparameter Optimization
+```python
+def objective(trial):
+    # Defines hyperparameter search space for Optuna
+```
+
+Uses Optuna for automated hyperparameter tuning. The search space includes:
+- n_estimators: Number of trees
+- max_depth: Maximum tree depth
+- learning_rate: Step size shrinkage
+- subsample: Subsample ratio of training instances
+- colsample_bytree: Subsample ratio of columns
+
+### Model Training and Evaluation
+The XGBoost model is trained with the best parameters found by Optuna and evaluated on a test set.
+
+## 5. Prophet Model Implementation
+
+Prophet is a procedure for forecasting time series data based on an additive model where non-linear trends are fit with yearly, weekly, and daily seasonality, plus holiday effects.
+
+```python
+# Format data for Prophet (requires 'ds' and 'y' columns)
+train_prophet = train.reset_index().rename(columns={'Date': 'ds', 'Close': 'y'})
+
+# Create and fit model
+prophet = Prophet()
+prophet.fit(train_prophet)
+
+# Make predictions
+future = prophet.make_future_dataframe(periods=num_days_pred, freq='D', include_history=False)
+forecast = prophet.predict(future)
+```
+
+## 6. ARIMA Model Implementation
+
+ARIMA (AutoRegressive Integrated Moving Average) is a classical time series forecasting method.
+
+```python
+# Check stationarity first
+is_stationary = check_stationarity(df_arima['Close'])
+
+# Fit ARIMA model
+arima = ARIMA(df_arima['Close'], order=(1, 1, 1))  # (p, d, q) parameters
+arima_fit = arima.fit()
+
+# Make forecasts
+arima_forecast = arima_fit.forecast(steps=num_days_pred)
+```
+
+The (1, 1, 1) order means:
+- p=1: One autoregressive term
+- d=1: First difference for stationarity
+- q=1: One moving average term
+
+## 7. Model Comparison and Visualization
+
+The code compares all three models using MAPE and creates a visualization showing:
+- Historical data (last 60 days)
+- Future predictions from all three models
+
+## Key Concepts in Time Series Forecasting
+
+1. **Stationarity**: A time series is stationary if its statistical properties don't change over time
+2. **Seasonality**: Regular pattern of fluctuations that repeat over a fixed period
+3. **Autocorrelation**: Correlation of a signal with a delayed copy of itself
+4. **Lag Features**: Previous values used as predictors for current values
+5. **Hyperparameter Tuning**: Optimizing model parameters for better performance
+
+## Model Strengths and Weaknesses
+
+- **XGBoost**: Powerful for capturing complex patterns but requires careful feature engineering
+- **Prophet**: Handles seasonality well and provides uncertainty intervals
+- **ARIMA**: Classical approach, good for stationary series with clear patterns
+
 This implementation provides a solid foundation for stock price prediction that can be extended with more sophisticated features, additional models, or ensemble approaches.
